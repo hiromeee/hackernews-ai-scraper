@@ -16,6 +16,10 @@ jobs:
     # 実行環境 (最新のUbuntu)
     runs-on: ubuntu-latest
 
+    # ジョブがリポジトリの内容を書き換える（コミットする）権限を付与します
+    permissions:
+      contents: write
+
     steps:
       # 1. リポジトリのコードをチェックアウト
       - name: Check out repository
