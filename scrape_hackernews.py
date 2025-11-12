@@ -32,7 +32,7 @@ def get_gemini_summary(article_title, article_url):
     """Gemini APIを使って記事を翻訳・要約する"""
     print(f"Gemini処理中: {article_title}")
     # gemini-1.5-flash は高速で無料枠があります
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
 
     prompt = f"""
     以下の技術ニュースを日本語で要約してください。
