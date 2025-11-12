@@ -1,6 +1,6 @@
 # AI Tech News Summary (from Hacker News)
 
-Hacker NewsからAI・Python関連のニュースを自動収集し、Gemini API（`gemini-1.5-flash`）で日本語に翻訳・要約して、GitHub Pagesに静的サイトとして自動公開するプロジェクトです。
+Hacker NewsからAI・Python関連のニュースを自動収集し、Gemini API（`gemini-2.5-flash`）で日本語に翻訳・要約して、GitHub Pagesに静的サイトとして自動公開するプロジェクトです。
 
 **[公開サイトのデモURL](https://hiromeee.github.io/hackernews-ai-scraper/)**
 
