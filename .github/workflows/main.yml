@@ -1,11 +1,21 @@
 name: Build and Deploy AI News Site
 
+# ワークフローが実行されるタイミング
 on:
+  # 1. スケジュール実行 (6時間ごと)
   schedule:
-    - cron: "0 */6 * * *" # 6時間ごと
+    - cron: "0 */6 * * *"
+    
+  # 2. 手動実行 (Actionsタブから)
   workflow_dispatch:
 
-# 以前の権限設定に 'id-token: write' を追加（デプロイに必要）
+  # 3. [追加] mainブランチへのプッシュ時 (CI/CD)
+  # これにより、UI (template.html) などを修正してプッシュした際も自動デプロイされます
+  push:
+    branches:
+      - main  # mainブランチ以外は無視
+
+# ジョブに必要な権限
 permissions:
   contents: read      # チェックアウトのために 'read' が必要
   pages: write       # GitHub Pagesにデプロイするために必要
@@ -20,18 +30,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 2. Python環境のセットアップ
+      # 2. Python環境のセットアップ (バージョン 3.10)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          cache: "pip"
+          cache: "pip" # pipのキャッシュを有効化
 
       # 3. 必要なライブラリをインストール
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 4. ニュース取得＆AI要約を実行
+      # 4. [重要] Geminiライブラリを最新版に強制アップグレード
+      # (古いv1beta APIエラーを防ぐため)
+      - name: Upgrade google-generativeai
+        run: pip install --upgrade google-generativeai
+
+      # 5. ニュース取得＆AI要約を実行
       # (ここで ai_news.json が生成される)
       - name: Run Scraper and AI Summary
         run: python scrape_hackernews.py
@@ -39,19 +54,19 @@ jobs:
           # GitHub SecretsからAPIキーを環境変数として渡す
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      # 5. 静的サイト (HTML) を構築
+      # 6. 静的サイト (HTML) を構築
       # (ここで dist/index.html が生成される)
       - name: Build Static Site
         run: python build_site.py
 
-      # 6. デプロイ成果物 (HTML) をアップロード
+      # 7. デプロイ成果物 (HTML) をアップロード
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # build_site.py で指定した出力先ディレクトリ
           path: './dist' 
 
-      # 7. GitHub Pagesにデプロイ
+      # 8. GitHub Pagesにデプロイ
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
