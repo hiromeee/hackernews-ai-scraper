@@ -1,5 +1,26 @@
 {
-  "last_updated": null,
-  "story_count": 0,
-  "stories": []
+  "last_updated_utc": "2025-11-12T12:06:50Z",
+  "keywords_used": [
+    "ai",
+    "python",
+    "llm",
+    "gpt",
+    "deep learning",
+    "pytorch",
+    "tensorflow"
+  ],
+  "articles": [
+    {
+      "title": "Yann LeCun to depart Meta and launch AI startup focused on 'world models'",
+      "url": "https://www.nasdaq.com/articles/metas-chief-ai-scientist-yann-lecun-depart-and-launch-ai-start-focused-world-models"
+    },
+    {
+      "title": "Pakistani newspaper mistakenly prints AI prompt with the article",
+      "url": "https://twitter.com/omar_quraishi/status/1988518627859951986"
+    },
+    {
+      "title": "We ran over 600 image generations to compare AI image models",
+      "url": "https://latenitesoft.com/blog/evaluating-frontier-ai-image-generation-models/"
+    }
+  ]
 }
