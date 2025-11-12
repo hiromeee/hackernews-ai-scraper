@@ -1,56 +1,57 @@
-name: Fetch AI News
+name: Build and Deploy AI News Site
 
-# ワークフローが実行されるタイミング
 on:
-  # 1. スケジュール実行 (Cronジョブ)
-  # 16時間ごとに実行 (UTC基準)
   schedule:
-    - cron: "0 */16 * * *"
-  
-  # 2. 手動実行 (Actionsタブから)
-  # GitHubのActionsタブで "Run workflow" ボタンを押して手動実行できる
+    - cron: "0 */6 * * *" # 6時間ごと
   workflow_dispatch:
 
+# 以前の権限設定に 'id-token: write' を追加（デプロイに必要）
+permissions:
+  contents: read      # チェックアウトのために 'read' が必要
+  pages: write       # GitHub Pagesにデプロイするために必要
+  id-token: write    # デプロイ認証のために必要
+
 jobs:
-  scrape-news:
-    # 実行環境 (最新のUbuntu)
+  build-and-deploy:
     runs-on: ubuntu-latest
-
-    # ジョブがリポジトリの内容を書き換える（コミットする）権限を付与します
-    permissions:
-      contents: write
-
+    
     steps:
       # 1. リポジトリのコードをチェックアウト
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 2. Python環境のセットアップ (バージョン 3.10)
+      # 2. Python環境のセットアップ
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          cache: "pip" # pipのキャッシュを有効化
+          cache: "pip"
 
       # 3. 必要なライブラリをインストール
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 4. Pythonスクリプトを実行
-      - name: Run scraper
+      # 4. ニュース取得＆AI要約を実行
+      # (ここで ai_news.json が生成される)
+      - name: Run Scraper and AI Summary
         run: python scrape_hackernews.py
+        env:
+          # GitHub SecretsからAPIキーを環境変数として渡す
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      # 5. (重要) 変更を自動コミット
-      # scrape_hackernews.py が ai_news.json を更新した場合、
-      # 変更を検知して自動でコミット＆プッシュする
-      - name: Commit and push if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
+      # 5. 静的サイト (HTML) を構築
+      # (ここで dist/index.html が生成される)
+      - name: Build Static Site
+        run: python build_site.py
+
+      # 6. デプロイ成果物 (HTML) をアップロード
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          # コミットメッセージ
-          commit_message: "Update AI news"
-          # コミット対象のファイル (ai_news.json のみ)
-          file_pattern: ai_news.json
-          # コミットするユーザー名
-          commit_user_name: "GitHub Actions Bot"
-          # コミットするユーザーのEmail
-          commit_user_email: "actions@github.com"
+          # build_site.py で指定した出力先ディレクトリ
+          path: './dist' 
+
+      # 7. GitHub Pagesにデプロイ
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
