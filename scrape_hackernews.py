@@ -13,23 +13,26 @@ KEYWORDS = ["ai", "python", "llm", "gpt",
 URL = "https://news.ycombinator.com/"
 # 保存ファイル名
 OUTPUT_FILE = "ai_news.json"
-# 処理する記事の上限（無料API枠のため）
-MAX_ARTICLES_TO_PROCESS = 3
+# 処理する記事の上限（無料API枠と実行時間のため）
+MAX_ARTICLES_TO_PROCESS = 5
 # ----------------
 
-# GitHub SecretsからAPIキーを取得
+# --- Gemini API設定 ---
 try:
+    # GitHub ActionsのSecretsからAPIキーを取得
     GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     genai.configure(api_key=GEMINI_API_KEY)
 except KeyError:
     print("エラー: 環境変数 'GEMINI_API_KEY' が設定されていません。")
-    exit(1)
+    if "GEMINI_API_KEY" not in os.environ:
+        exit("GitHub Secrets (GEMINI_API_KEY) が設定されていないため終了します。")
 
 
 def get_gemini_summary(article_title, article_url):
     """Gemini APIを使って記事を翻訳・要約する"""
     print(f"Gemini処理中: {article_title}")
-    model = genai.GenerativeModel('gemini-1.5-flash')  # 無料枠で高速なモデル
+    # gemini-1.5-flash は高速で無料枠があります
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
     prompt = f"""
     以下の技術ニュースを日本語で要約してください。
@@ -37,25 +40,39 @@ def get_gemini_summary(article_title, article_url):
     タイトル: {article_title}
     URL: {article_url}
 
-    出力形式は以下のJSON形式のみでお願いします。
+    出力は、必ず以下のJSON形式のみでお願いします。説明や前置きは一切不要です。
     {{
-      "japanese_title": "日本語のタイトル",
+      "japanese_title": "日本語に翻訳したタイトル",
       "summary": "3行程度の簡潔な日本語の要約"
     }}
     """
 
     try:
-        response = model.generate_content(prompt)
-        # レスポンスがJSON形式であることを期待
-        json_response = json.loads(
-            response.text.strip("```json\n").strip("\n```"))
-        return json_response
+        # API呼び出し (タイムアウトを30秒に設定)
+        response = model.generate_content(
+            prompt, request_options={"timeout": 30})
+
+        # レスポンスがJSON形式であることを期待してパース
+        # Geminiは時々 ```json ... ``` で囲むことがあるため、それを取り除く
+        cleaned_text = response.text.strip().lstrip("```json").rstrip("```").strip()
+
+        json_response = json.loads(cleaned_text)
+
+        # 必須キーのチェック
+        if "japanese_title" in json_response and "summary" in json_response:
+            return json_response
+        else:
+            raise ValueError("必要なキー (japanese_title, summary) がありません")
+
     except Exception as e:
-        print(f"Gemini APIエラー: {e}")
+        print(f"Gemini APIエラー (タイトル: {article_title}): {e}")
+        # エラーが発生した場合も、サイト表示が壊れないよう空の情報を返す
         return {
-            "japanese_title": f"（翻訳エラー: {article_title}）",
-            "summary": "記事の要約に失敗しました。"
+            "japanese_title": f"（AI処理エラー: {article_title}）",
+            "summary": "記事の要約・翻訳に失敗しました。"
         }
+
+# --- ここから下は、以前のスクリプトにあった関数です ---
 
 
 def fetch_hackernews():
@@ -105,43 +122,55 @@ def save_to_json(data):
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        print(f"Successfully saved {len(data)} articles to {OUTPUT_FILE}")
+        # 保存された記事の件数を表示（data["articles"] の件数）
+        print(
+            f"Successfully saved {len(data.get('articles', []))} articles to {OUTPUT_FILE}")
     except IOError as e:
         print(f"Error writing to file: {e}")
+
+# --- main関数 (AI処理を呼び出すように更新) ---
 
 
 def main():
     print("Fetching Hacker News...")
     html = fetch_hackernews()
     if not html:
+        print("Failed to fetch HTML. Exiting.")
         return
 
     print("Parsing articles...")
     all_articles = parse_news(html)
 
-    print(f"Filtering by keywords...")
+    print(
+        f"Found {len(all_articles)} articles. Filtering by keywords: {KEYWORDS}")
     ai_articles = filter_articles(all_articles)
 
-    print(
-        f"Found {len(ai_articles)} relevant articles. Processing top {MAX_ARTICLES_TO_PROCESS}...")
+    if not ai_articles:
+        print("キーワードにマッチする記事が見つかりませんでした。")
+        processed_articles = []
+    else:
+        print(
+            f"Found {len(ai_articles)} relevant articles. Processing top {MAX_ARTICLES_TO_PROCESS}...")
+        processed_articles = []
+        # 上位の記事だけを処理 (API節約)
+        for article in ai_articles[:MAX_ARTICLES_TO_PROCESS]:
+            # Gemini APIを呼び出し
+            summary_data = get_gemini_summary(article["title"], article["url"])
 
-    processed_articles = []
-    # 上位の記事だけを処理 (API節約)
-    for article in ai_articles[:MAX_ARTICLES_TO_PROCESS]:
-        summary_data = get_gemini_summary(article["title"], article["url"])
+            # 元の記事情報とAIの処理結果をマージ
+            article.update(summary_data)
+            processed_articles.append(article)
+            # APIのレート制限を避けるため、1秒待機
+            time.sleep(1)
 
-        # 元の記事情報とAIの処理結果をマージ
-        article.update(summary_data)
-        processed_articles.append(article)
-        time.sleep(1)  # APIのレート制限を避けるため
-
+    # 最終的な結果データ (build_site.py が読み込む形式)
     result_data = {
         "last_updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "articles": processed_articles
+        "articles": processed_articles  # ここが重要！
     }
 
-    # save_to_json(result_data) を呼び出す
-    # (※前回のコードをそのまま使ってください)
+    save_to_json(result_data)
+    print("Script finished.")
 
 
 if __name__ == "__main__":
